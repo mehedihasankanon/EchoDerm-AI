@@ -1,27 +1,23 @@
 """
-database.py — Supabase connection boilerplate for EchoDerm AI.
+database.py — Lightweight Supabase connection for EchoDerm AI.
 
-Provides a singleton Supabase client and helper functions for logging
-diagnostic results to the `diagnostic_results` table.
+Uses httpx instead of the official supabase-py library to avoid 
+heavy C-based dependencies (like pyiceberg) that fail on some Windows systems.
 """
 
 import os
+import httpx
 from dotenv import load_dotenv
-from supabase import create_client, Client
 
 load_dotenv()
 
 SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY: str = os.environ.get("SUPABASE_KEY", "")
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise EnvironmentError(
-        "SUPABASE_URL and SUPABASE_KEY must be set in the environment or .env file."
-    )
-
-# Singleton Supabase client
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
+# Ensure URL ends with /rest/v1/ for direct API access
+if SUPABASE_URL and not SUPABASE_URL.endswith("/rest/v1"):
+    # Strip trailing slash if present then add the rest path
+    SUPABASE_URL = SUPABASE_URL.rstrip("/") + "/rest/v1"
 
 async def log_diagnostic_result(
     patient_id: str,
@@ -30,18 +26,12 @@ async def log_diagnostic_result(
     raw_response: dict,
 ) -> dict:
     """
-    Insert a diagnostic result row into the `diagnostic_results` table.
-
-    Expected table schema (create in Supabase dashboard):
-        id              uuid        DEFAULT gen_random_uuid()  PRIMARY KEY
-        patient_id      text        NOT NULL
-        primary_diagnosis text      NOT NULL
-        confidence_score float8     NOT NULL
-        raw_response    jsonb
-        created_at      timestamptz DEFAULT now()
-
-    Returns the inserted row data.
+    Insert a diagnostic result row into the `diagnostic_results` table using REST API.
     """
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("[WARN] Supabase credentials not found. Skipping database log.")
+        return {}
+
     payload = {
         "patient_id": patient_id,
         "primary_diagnosis": primary_diagnosis,
@@ -49,10 +39,22 @@ async def log_diagnostic_result(
         "raw_response": raw_response,
     }
 
-    response = (
-        supabase.table("diagnostic_results")
-        .insert(payload)
-        .execute()
-    )
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
 
-    return response.data
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{SUPABASE_URL}/diagnostic_results",
+            json=payload,
+            headers=headers,
+        )
+        
+        if response.status_code >= 400:
+            raise Exception(f"Supabase error: {response.text}")
+            
+        return response.json()
+
