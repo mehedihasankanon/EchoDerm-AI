@@ -43,3 +43,7 @@ uploads/
 tmp/
 *.tmp
 media_chunks/
+
+# user specific files
+
+**/kanon**
