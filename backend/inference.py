@@ -9,7 +9,8 @@ and a cough audio clip, producing a structured differential diagnosis
 import json
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 load_dotenv()
 
@@ -20,7 +21,8 @@ if not GEMINI_API_KEY:
         "GEMINI_API_KEY must be set in the environment or .env file."
     )
 
-genai.configure(api_key=GEMINI_API_KEY)
+# Initialize the new SDK Client
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ── System instruction for strict differential diagnosis ────────────────────
 SYSTEM_INSTRUCTION = """
@@ -52,18 +54,6 @@ Rules:
 - Never refuse to answer; always provide your best clinical estimate.
 """
 
-# ── Gemini model configuration ──────────────────────────────────────────────
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    system_instruction=SYSTEM_INSTRUCTION,
-    generation_config=genai.GenerationConfig(
-        temperature=0.2,
-        top_p=0.8,
-        max_output_tokens=1024,
-        response_mime_type="application/json",
-    ),
-)
-
 
 async def analyze_multimodal_symptoms(
     image_bytes: bytes,
@@ -92,23 +82,35 @@ async def analyze_multimodal_symptoms(
         SYSTEM_INSTRUCTION.
     """
 
-    # Build the multimodal prompt parts
-    prompt_parts = [
-        # Image payload
-        {"mime_type": image_mime_type, "data": image_bytes},
-        # Audio payload
-        {"mime_type": audio_mime_type, "data": audio_bytes},
-        # Text instruction accompanying the media
+    # Build the multimodal contents
+    contents = [
+        types.Part.from_bytes(data=image_bytes, mime_type=image_mime_type),
+        types.Part.from_bytes(data=audio_bytes, mime_type=audio_mime_type),
         (
             "Analyze the attached skin‑rash photograph and cough audio recording. "
             "Provide your differential diagnosis as strict JSON."
         ),
     ]
 
-    # Invoke the model (async‑compatible via generate_content_async)
-    response = await model.generate_content_async(prompt_parts)
+    # Package the model parameters using GenerateContentConfig
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM_INSTRUCTION,
+        temperature=0.2,
+        top_p=0.8,
+        max_output_tokens=1024,
+        response_mime_type="application/json",
+    )
+
+    # Invoke the model asynchronously using the modern client syntax
+    response = await client.aio.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=contents,
+        config=config,
+    )
 
     # Parse the strict‑JSON response
+    if response.text is None:
+        raise ValueError("Model response returned no text content")
     result: dict = json.loads(response.text)
 
     return result
