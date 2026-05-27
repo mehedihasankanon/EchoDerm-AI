@@ -15,6 +15,7 @@ from google.genai import types
 load_dotenv()
 
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL: str = "gemini-3.1-flash-lite"  # Specify the desired Gemini model version
 
 if not GEMINI_API_KEY:
     raise EnvironmentError(
@@ -103,7 +104,7 @@ async def analyze_multimodal_symptoms(
 
     # Invoke the model asynchronously using the modern client syntax
     response = await client.aio.models.generate_content(
-        model="gemini-1.5-flash",
+        model=GEMINI_MODEL,
         contents=contents,
         config=config,
     )
