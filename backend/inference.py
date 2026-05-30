@@ -1,14 +1,21 @@
 """
 inference.py — Multimodal Gemini inference for EchoDerm AI.
 
-Uses Gemini 3.1 Flash Lite to perform simultaneous analysis of a skin‑rash
+Uses Gemini 3.1 Flash Lite to perform simultaneous analysis of a skin-rash
 image and a cough audio clip, producing a structured differential diagnosis
 (Measles vs. Dengue) with confidence breakdown by modality.
+
+Now supports optional RAG context injection — when pgvector retrieves
+relevant WHO guideline chunks, they are appended to the system instruction
+to ground the model's output in official clinical literature.
 """
+
+from __future__ import annotations
 
 import json
 import os
 import time
+
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -27,10 +34,10 @@ if not GEMINI_API_KEY:
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # System instruction version — increment when you change the prompt
-SYSTEM_INSTRUCTION_VERSION = "v2.1"
+SYSTEM_INSTRUCTION_VERSION = "v3.0"
 
-# ── System instruction with clinical differentiation criteria ───────────────
-SYSTEM_INSTRUCTION = """
+# ── Base system instruction with clinical differentiation criteria ────────────
+BASE_SYSTEM_INSTRUCTION = """\
 You are EchoDerm AI, a clinical decision-support system for differentiating
 Measles from Dengue in pediatric patients in rural Bangladesh.
 
@@ -76,6 +83,10 @@ ACOUSTIC MARKERS (from the cough audio):
   - Dengue is NOT primarily a respiratory illness
   - NOTE: The ABSENCE of a significant cough is itself a Dengue indicator
 
+  HEALTHY indicators:
+  - Clear, normal skin with no significant erythematous patches, macules, or petechiae
+  - No distinct harsh cough in the audio
+
 ═══ DECISION LOGIC ═══
 
 Weight the visual evidence at 60% and acoustic evidence at 40%.
@@ -86,15 +97,34 @@ barking/harsh cough → strong Measles signal (confidence > 0.80).
 If the image shows diffuse rash with petechiae AND the audio shows
 absent/mild cough → strong Dengue signal (confidence > 0.80).
 
-If signals conflict (e.g., Measles-like rash but no cough), reduce
+If BOTH the image shows healthy/normal skin AND the audio shows normal background 
+noise or no significant cough → output "Healthy" (confidence > 0.80).
+
+If signals conflict (e.g., normal skin but severe barking cough), output 
+the disease matching the strongest signal (e.g., Measles) but reduce 
 confidence to 0.50-0.70 and explain the conflict in differential_notes.
+
+═══ SCOPE GUARDRAIL ═══
+
+You MUST REFUSE to analyze images that are clearly NOT skin rashes or normal skin 
+(e.g., broken bones, X-rays, unrelated body parts, non-medical photos).
+If the image is out of scope, return:
+{
+  "primary_diagnosis": "Healthy",
+  "confidence_score": 0.0,
+  "confidence_breakdown": {"visual_confidence": 0.0, "acoustic_confidence": 0.0, "cross_modal_agreement": "discordant"},
+  "visual_findings": "Image does not appear to be a relevant body part.",
+  "acoustic_findings": "Analysis skipped — image out of scope.",
+  "differential_notes": "The uploaded image does not match the expected input type. Please upload a clear photo of the patient's skin.",
+  "recommended_next_steps": ["Upload a clear photograph of the patient's skin"]
+}
 
 ═══ OUTPUT FORMAT ═══
 
 Return STRICT JSON matching this exact schema. No markdown, no commentary.
 
 {
-  "primary_diagnosis": "Measles" or "Dengue",
+  "primary_diagnosis": "Measles" or "Dengue" or "Healthy",
   "confidence_score": <float 0.0-1.0>,
   "confidence_breakdown": {
     "visual_confidence": <float 0.0-1.0>,
@@ -117,12 +147,30 @@ Return STRICT JSON matching this exact schema. No markdown, no commentary.
     "acoustic_confidence": 0.85,
     "cross_modal_agreement": "concordant"
   },
-  "visual_findings": "Confluent maculopapular erythematous rash with cephalocaudal distribution. Rash is most dense on face and upper trunk, consistent with day 2-3 of measles exanthem.",
-  "acoustic_findings": "Harsh, dry, barking cough with audible stridor on inspiration. Nonproductive quality suggests laryngeal involvement typical of measles croup.",
-  "differential_notes": "Both visual and acoustic markers strongly indicate Measles. Cephalocaudal rash progression is pathognomonic. The barking cough with stridor further supports measles over dengue, which rarely presents with significant cough. Cross-modal signals are concordant.",
-  "recommended_next_steps": ["Administer Vitamin A 200,000 IU immediately", "Isolate patient from other children", "Monitor for pneumonia signs", "Notify local health authority"]
+  "visual_findings": "Confluent maculopapular erythematous rash with cephalocaudal distribution.",
+  "acoustic_findings": "Harsh, dry, barking cough with audible stridor on inspiration.",
+  "differential_notes": "Both visual and acoustic markers strongly indicate Measles. Cross-modal signals are concordant.",
+  "recommended_next_steps": ["Administer Vitamin A 200,000 IU immediately", "Isolate patient", "Monitor for pneumonia"]
 }
 """
+
+
+def _build_system_instruction(rag_context: str = "") -> str:
+    """
+    Build the complete system instruction, optionally injecting
+    RAG context from pgvector WHO guideline retrieval.
+    """
+    if not rag_context:
+        return BASE_SYSTEM_INSTRUCTION
+
+    return (
+        BASE_SYSTEM_INSTRUCTION
+        + "\n\n═══ RETRIEVED WHO GUIDELINES (from pgvector RAG) ═══\n\n"
+        + "The following WHO guideline excerpts were retrieved from our "
+        + "verified clinical database. Use these to ground your recommended_next_steps. "
+        + "Do NOT contradict these guidelines.\n\n"
+        + rag_context
+    )
 
 
 async def analyze_multimodal_symptoms(
@@ -130,11 +178,20 @@ async def analyze_multimodal_symptoms(
     image_mime_type: str,
     audio_bytes: bytes,
     audio_mime_type: str,
+    rag_context: str = "",
 ) -> dict:
     """
-    Run dual‑modal inference on skin‑rash image + cough audio.
+    Run dual-modal inference on skin-rash image + cough audio.
 
-    Returns a dict with the diagnosis AND inference metadata.
+    Args:
+        image_bytes: Raw bytes of the rash photograph
+        image_mime_type: MIME type of the image
+        audio_bytes: Raw bytes of the cough audio
+        audio_mime_type: MIME type of the audio
+        rag_context: Optional pre-assembled RAG context string from pgvector
+
+    Returns:
+        dict with the diagnosis AND inference metadata
     """
 
     # Build the multimodal contents
@@ -148,9 +205,12 @@ async def analyze_multimodal_symptoms(
         ),
     ]
 
+    # Build system instruction with optional RAG context
+    system_instruction = _build_system_instruction(rag_context)
+
     # Package the model parameters using GenerateContentConfig
     config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_INSTRUCTION,
+        system_instruction=system_instruction,
         temperature=0.2,
         top_p=0.8,
         max_output_tokens=1024,
@@ -169,7 +229,7 @@ async def analyze_multimodal_symptoms(
 
     inference_time_ms = round((time.time() - start_time) * 1000)
 
-    # Parse the strict‑JSON response
+    # Parse the strict-JSON response
     if response.text is None:
         raise ValueError("Model response returned no text content")
     result: dict = json.loads(response.text)
@@ -179,6 +239,7 @@ async def analyze_multimodal_symptoms(
         "model": GEMINI_MODEL,
         "system_instruction_version": SYSTEM_INSTRUCTION_VERSION,
         "inference_time_ms": inference_time_ms,
+        "rag_context_injected": bool(rag_context),
     }
 
     return result

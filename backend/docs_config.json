@@ -1,0 +1,25 @@
+{
+  "is_public": true,
+  "start_date": null,
+  "end_date": null,
+  "team_members": [
+    {
+      "name": "Rayyan Khalil",
+      "role": "Full-Stack AI Architect & Product Lead",
+      "email": "rayyankhalil167373@gmail.com",
+      "avatar_url": "https://ui-avatars.com/api/?name=Rayyan&background=6366f1&color=fff&size=150"
+    },
+    {
+      "name": "Mehedi Hasan Kanon",
+      "role": "Frontend Architect and Integrations",
+      "email": "mehedi.hkanon@gmail.com",
+      "avatar_url": "https://ui-avatars.com/api/?name=Kanon&background=8b5cf6&color=fff"
+    },
+    {
+      "name": "Adnan Ahamed Tamim",
+      "role": "Backend Engineer",
+      "email": "adnanahamedtamim@gmail.com",
+      "avatar_url": "https://ui-avatars.com/api/?name=Tamim&background=14b8a6&color=fff&size=150"
+    }
+  ]
+}
