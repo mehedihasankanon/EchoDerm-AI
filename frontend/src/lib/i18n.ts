@@ -28,7 +28,7 @@ const translations: Record<Language, Record<string, string>> = {
     "patient.id.placeholder": "Enter patient name or ID",
 
     // Analyze
-    "analyze.button": "Instantly Differentiate",
+    "analyze.button": "Evaluate",
     "analyze.loading": "Analyzing...",
     "analyze.error.both": "Please upload both a rash image and a cough recording.",
 

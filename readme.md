@@ -1,6 +1,6 @@
 # EchoDerm AI
 
-> **A dual-modal AI diagnostic co-pilot that simultaneously analyzes skin rashes and acoustic cough signatures to instantly differentiate Measles from Dengue and Rubella in rural clinics.**
+> **A dual-modal AI diagnostic co-pilot that simultaneously analyzes skin rashes and acoustic cough signatures to instantly evaluate Measles from Dengue and Rubella in rural clinics.**
 
 ---
 <!--
