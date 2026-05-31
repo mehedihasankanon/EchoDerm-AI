@@ -244,55 +244,7 @@ function App() {
   // CONSENT SCREEN
   // ══════════════════════════════════════════════════════════════════
 
-  if (!consented) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-slate-50 via-indigo-50/30 to-slate-100">
-        {/* Consent glass modal */}
-        <div className="glass-modal rounded-3xl p-10 max-w-lg w-full text-center">
-          <div className="w-20 h-20 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
-            <span className="text-4xl">⚕️</span>
-          </div>
-          <h1 className="text-2xl font-bold mb-2 gradient-text">{t('ethical.consent.title', lang)}</h1>
-          <p className="text-gray-500 mb-8 text-base leading-relaxed">{t('ethical.consent.body', lang)}</p>
 
-          <div className="text-left space-y-4 mb-8">
-            <p className="text-sm font-semibold text-indigo-600">{t('ethical.consent.data', lang)}</p>
-            <ul className="text-sm text-gray-600 space-y-2 list-disc pl-5 leading-relaxed">
-              <li>{t('ethical.consent.data.1', lang)}</li>
-              <li>{t('ethical.consent.data.2', lang)}</li>
-              <li>{t('ethical.consent.data.3', lang)}</li>
-            </ul>
-            <p className="text-sm font-semibold text-amber-600 mt-4">{t('ethical.consent.limitations', lang)}</p>
-            <ul className="text-sm text-gray-600 space-y-2 list-disc pl-5 leading-relaxed">
-              <li>{t('ethical.consent.limitations.1', lang)}</li>
-              <li>{t('ethical.consent.limitations.2', lang)}</li>
-              <li>{t('ethical.consent.limitations.3', lang)}</li>
-            </ul>
-          </div>
-
-          <label className="flex items-center gap-3 mb-8 cursor-pointer justify-center">
-            <input type="checkbox" checked={consentChecked} onChange={e => setConsentChecked(e.target.checked)}
-              className="w-5 h-5 accent-indigo-600 rounded" />
-            <span className="text-sm text-gray-600">{t('ethical.consent.checkbox', lang)}</span>
-          </label>
-
-          <button onClick={handleConsent} disabled={!consentChecked}
-            className={`w-full py-3.5 rounded-xl font-bold text-lg transition-all ${
-              consentChecked
-                ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-200'
-                : 'bg-gray-200 cursor-not-allowed text-gray-400'
-            }`}>
-            {t('ethical.consent.accept', lang)}
-          </button>
-
-          <button onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}
-            className="mt-5 text-sm text-gray-400 hover:text-indigo-600 transition-colors">
-            {t('lang.toggle', lang)}
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // ══════════════════════════════════════════════════════════════════
   // MAIN APP
@@ -302,7 +254,54 @@ function App() {
   const breakdown = result?.diagnosis.confidence_breakdown;
 
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-8 min-h-screen">
+    <div className="min-h-screen flex flex-col relative">
+      {/* ── CONSENT MODAL OVERLAY ── */}
+      {!consented && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 modal-backdrop">
+          <div className="bg-white rounded-3xl p-10 max-w-lg w-full text-center shadow-2xl border border-gray-100">
+            <div className="w-20 h-20 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+              <span className="text-4xl">⚕️</span>
+            </div>
+            <h1 className="text-2xl font-bold mb-2 gradient-text">{t('ethical.consent.title', lang)}</h1>
+            <p className="text-gray-500 mb-8 text-base leading-relaxed">{t('ethical.consent.body', lang)}</p>
+
+            <div className="text-left space-y-4 mb-8">
+              <p className="text-sm font-semibold text-indigo-600">{t('ethical.consent.data', lang)}</p>
+              <ul className="text-sm text-gray-600 space-y-2 list-disc pl-5 leading-relaxed">
+                <li>{t('ethical.consent.data.1', lang)}</li>
+                <li>{t('ethical.consent.data.2', lang)}</li>
+                <li>{t('ethical.consent.data.3', lang)}</li>
+              </ul>
+              <p className="text-sm font-semibold text-amber-600 mt-4">{t('ethical.consent.limitations', lang)}</p>
+              <ul className="text-sm text-gray-600 space-y-2 list-disc pl-5 leading-relaxed">
+                <li>{t('ethical.consent.limitations.1', lang)}</li>
+                <li>{t('ethical.consent.limitations.2', lang)}</li>
+                <li>{t('ethical.consent.limitations.3', lang)}</li>
+              </ul>
+            </div>
+
+            <label className="flex items-center gap-3 mb-8 cursor-pointer justify-center">
+              <input type="checkbox" checked={consentChecked} onChange={e => setConsentChecked(e.target.checked)}
+                className="w-5 h-5 accent-indigo-600 rounded" />
+              <span className="text-sm text-gray-600">{t('ethical.consent.checkbox', lang)}</span>
+            </label>
+
+            <button onClick={handleConsent} disabled={!consentChecked}
+              className={`w-full py-3.5 rounded-xl font-bold text-lg transition-all ${
+                consentChecked
+                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-200'
+                  : 'bg-gray-200 cursor-not-allowed text-gray-400'
+              }`}>
+              {t('ethical.consent.accept', lang)}
+            </button>
+
+            <button onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}
+              className="mt-5 text-sm text-gray-400 hover:text-indigo-600 transition-colors">
+              {t('lang.toggle', lang)}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <header className="text-center mb-10 pt-4">
